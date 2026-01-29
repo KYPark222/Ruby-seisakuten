@@ -175,6 +175,18 @@ body {
   gap: 1rem;
 }
 
+.recover-btn {
+  background: linear-gradient(135deg, #2ecc71, #27ae60);
+  color: #fff;
+  border: none;
+  padding: 1rem;
+  border-radius: 8px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(46, 204, 113, 0.3);
+  margin-top: auto;
+}
+
 .stat-row {
   display: flex;
   align-items: center;
@@ -395,6 +407,13 @@ body {
 .map-dot[data-major="true"] .dot-inner {
   border-color: var(--neon-red);
   box-shadow: 0 0 10px var(--neon-red);
+}
+
+.map-dot[data-defeated="1"] .dot-inner,
+.map-dot[data-defeated="true"] .dot-inner {
+  background: rgba(46, 204, 113, 0.6);
+  border-color: #2ecc71;
+  box-shadow: 0 0 15px #2ecc71;
 }
 
 /* Character on Map */

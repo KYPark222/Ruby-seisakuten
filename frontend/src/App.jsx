@@ -1,182 +1,149 @@
-import { useState, useEffect, useRef } from 'react'
-import axios from 'axios'
-import { Sword, Zap, Coins, MapPin, Skull, ShieldAlert, Shield } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Sword, Zap, Map as MapIcon, ChevronRight, MessageSquare, Shield } from 'lucide-react'
+import axios from 'axios'
 import './App.css'
 
-// Import assets
+// Assets
 import heroImg from './assets/hero.jpg'
 import miniHero1 from './assets/mini_hero_1.png'
 import miniHero2 from './assets/mini_hero_2.png'
 
 const API_BASE = 'http://localhost:3001/api'
 
-// Coordinate helper (Interpolated)
-const getPos = (square, areas) => {
-  if (!areas || areas.length === 0) return { x: 0, y: 0 };
-
-  const s = Math.max(1, Math.min(square, 47));
-  const floorS = Math.floor(s);
-  const ceilS = Math.ceil(s);
-
-  const a1 = areas.find(a => a.order === floorS) || areas[0];
-  const a2 = areas.find(a => a.order === ceilS) || a1;
-
-  const t = s - floorS;
-  return {
-    x: a1.x + (a2.x - a1.x) * t,
-    y: a1.y + (a2.y - a1.y) * t
-  };
-};
-
-function App() {
+export default function App() {
   const [player, setPlayer] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [logs, setLogs] = useState(["全国制覇への道が始まった..."])
-  const [isRolling, setIsRolling] = useState(false)
-  const [isWalking, setIsWalking] = useState(false)
-  const [walkImgIdx, setWalkImgIdx] = useState(1)
-  const [displaySquare, setDisplaySquare] = useState(0)
   const [allAreas, setAllAreas] = useState([])
+  const [isRolling, setIsRolling] = useState(false)
+  const [lastRoll, setLastRoll] = useState(null)
+  const [logs, setLogs] = useState(["全国制覇への旅が始まった..."])
   const [battle, setBattle] = useState(null)
   const [rival, setRival] = useState(null)
   const [prediction, setPrediction] = useState(null)
-  const [lastRoll, setLastRoll] = useState(null)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const [isWalking, setIsWalking] = useState(false)
+  const [walkImgIdx, setWalkImgIdx] = useState(1)
   const [showEnding, setShowEnding] = useState(false)
   const [showGameOver, setShowGameOver] = useState(false)
+
   const logEndRef = useRef(null)
 
-  const fetchPlayer = async () => {
-    try {
-      const res = await axios.get(`${API_BASE}/player`)
-      setPlayer(res.data)
-      setDisplaySquare(res.data.current_square)
-      setLoading(false)
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  const fetchAreas = async () => {
-    try {
-      const res = await axios.get(`${API_BASE}/areas`)
-      setAllAreas(res.data)
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
   useEffect(() => {
-    fetchPlayer()
-    fetchAreas()
+    fetchInitialData()
   }, [])
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
-  // Walking animation loop
-  useEffect(() => {
-    let interval;
-    if (isWalking) {
-      interval = setInterval(() => {
-        setWalkImgIdx(prev => (prev === 1 ? 2 : 1))
-      }, 200);
-    } else {
-      setWalkImgIdx(1);
+  const fetchInitialData = async () => {
+    try {
+      const [pRes, aRes] = await Promise.all([
+        axios.get(`${API_BASE}/player`),
+        axios.get(`${API_BASE}/areas`)
+      ])
+      setPlayer(pRes.data)
+      setAllAreas(aRes.data)
+      setPos({ x: pRes.data.x, y: pRes.data.y })
+    } catch (e) {
+      console.error("Failed to fetch data", e)
     }
-    return () => clearInterval(interval);
-  }, [isWalking])
+  }
 
   const addLog = (msg) => {
-    setLogs(prev => [...prev, `> ${msg}`])
+    setLogs(prev => [...prev, msg].slice(-20))
   }
 
   const handleRoll = async () => {
+    if (isRolling || battle) return
     setIsRolling(true)
-    addLog("サイコロを振っている...")
-
     try {
-      await new Promise(r => setTimeout(r, 800))
-
       const res = await axios.post(`${API_BASE}/sugoroku/roll`)
       const { roll, player: updatedPlayer, event, message } = res.data
 
       setLastRoll(roll)
-
-      // Start sequential walking animation
-      setIsWalking(true)
-      addLog(`${roll} の目が出た！気合で歩くぞ！`)
-
-      // Move step by step (Interpolated)
-      let currentSq = player.current_square;
-
-      const steps = roll * 10; // 10 mini-steps per square for smooth transition
-      for (let i = 0; i <= steps; i++) {
-        await new Promise(r => setTimeout(r, 60)); // Time per mini-step
-        setDisplaySquare(currentSq + (i / 10));
-      }
-
-      await new Promise(r => setTimeout(r, 400));
-      setIsWalking(false)
-      setPlayer(updatedPlayer)
-      setDisplaySquare(updatedPlayer.current_square)
       addLog(message)
 
-      if (event === 'battle' || event === 'boss_battle') {
-        startBattle(event === 'boss_battle')
-      }
-    } catch (err) {
-      addLog("エラー発生：バックエンドが喧嘩に負けてるようだ")
-    } finally {
+      // Start Walking Animation
+      setIsWalking(true)
+      const walkInterval = setInterval(() => {
+        setWalkImgIdx(prev => (prev === 1 ? 2 : 1))
+      }, 150)
+
+      // Linear move for simplicity in this demo, usually you'd animate through segments
+      setPos({ x: updatedPlayer.x, y: updatedPlayer.y })
+
+      setTimeout(async () => {
+        clearInterval(walkInterval)
+        setIsWalking(false)
+        setIsRolling(false)
+        setLastRoll(null)
+        setPlayer(updatedPlayer)
+
+        if (event === 'battle' || event === 'boss_battle') {
+          startBattle(event === 'boss_battle')
+        }
+      }, 2000)
+
+    } catch (e) {
       setIsRolling(false)
     }
   }
 
-  const startBattle = async (isBoss = false) => {
+  const startBattle = async (isBoss) => {
     try {
       const res = await axios.post(`${API_BASE}/battle/start`, { isBoss })
+      setBattle({ id: res.data.battleId, status: 'active', rival_current_guts: res.data.rival.guts })
       setRival(res.data.rival)
-      setBattle({ ...res.data.battle, rival_current_guts: res.data.rival.guts, status: 'active' })
-      addLog(`${res.data.rival.name}が現れた！喧嘩上等だ！`)
+      fetchPrediction()
+    } catch (e) {
+      console.error("Battle failed to start", e)
+    }
+  }
 
-      // Fetch Ruby Prediction
-      const predRes = await axios.post(`${API_BASE}/battle/predict`, {
-        player_hp: player.guts,
-        player_atk: player.strength,
-        enemy_hp: res.data.rival.guts,
-        enemy_atk: res.data.rival.strength
-      })
-      setPrediction(predRes.data)
-    } catch (err) {
-      console.error(err)
+  const fetchPrediction = async () => {
+    try {
+      const res = await axios.post(`${API_BASE}/battle/predict`)
+      setPrediction(res.data)
+    } catch (e) {
+      setPrediction(null)
     }
   }
 
   const handleBattleAction = async (action) => {
     try {
       const res = await axios.post(`${API_BASE}/battle/action`, { action })
-      const { logs: battleLogs, battle: updatedBattle, player: updatedPlayer } = res.data
+      const { status, logs: battleLogs, player: updatedPlayer, rivalGuts } = res.data
 
       battleLogs.forEach(l => addLog(l))
-      setBattle(updatedBattle)
       setPlayer(updatedPlayer)
+      setBattle(prev => ({ ...prev, status, rival_current_guts: rivalGuts }))
 
-      if (updatedBattle.status === 'won') {
-        if (rival.gimmick === 'phase_shift') {
-          setTimeout(() => setShowEnding(true), 1500)
-        } else {
-          setTimeout(() => {
-            setBattle(null)
-            setRival(null)
-            setPrediction(null)
-          }, 2000)
+      if (status === 'won') {
+        if (rival.is_boss && updatedPlayer.current_area_name === '東京') {
+          setShowEnding(true)
         }
-      } else if (updatedBattle.status === 'lost') {
-        setTimeout(() => setShowGameOver(true), 1500)
+        setTimeout(() => {
+          setBattle(null)
+          setRival(null)
+          setPrediction(null)
+          fetchInitialData() // Refresh areas to see boss_defeated
+        }, 3000)
+      } else if (status === 'lost') {
+        setShowGameOver(true)
       }
-    } catch (err) {
-      console.error(err)
+    } catch (e) {
+      console.error("Action failed", e)
+    }
+  }
+
+  const handleRecover = async () => {
+    try {
+      const res = await axios.post(`${API_BASE}/player/recover`)
+      addLog(res.data.message)
+      setPlayer(res.data.player)
+    } catch (e) {
+      addLog("エラー: " + (e.response?.data?.error || "回復できません。"))
     }
   }
 
@@ -184,69 +151,63 @@ function App() {
     window.location.reload()
   }
 
-  // Get Next Objective Helper
-  const getNextObjective = (currentSq) => {
-    const objectives = [
-      { order: 11, name: '広島', boss: '鬼瓦 鉄丸 (紅蓮鉄砲高校)' },
-      { order: 16, name: '大阪', boss: '笑門 (浪速笑殺高校)' },
-      { order: 26, name: '沖縄', boss: '島袋 カイ (琉覇魂高校)' },
-      { order: 46, name: '北海道', boss: '氷室 冬牙 (白夜極寒高校)' },
-      { order: 47, name: '東京', boss: '総代 会長 (国会議事堂高校)' }
-    ];
-    const next = objectives.find(o => o.order > currentSq) || objectives[objectives.length - 1];
-    const distance = next.order - currentSq;
-    return { ...next, distance: Math.max(0, distance) };
-  };
+  if (!player) return <div className="loading">LOADING NANIWA...</div>
 
-  if (loading || allAreas.length === 0) return <div className="loading">LOADING GUTS...</div>
-
-  const pos = getPos(displaySquare, allAreas);
-  const nextObj = getNextObjective(player.current_square);
+  const currentArea = allAreas.find(a => a.id === player.current_area_id)
+  const displaySquare = player.current_square
+  const expNeeded = player.level * 100
+  const canRecover = currentArea?.order === 1 || currentArea?.boss_defeated;
 
   return (
     <div className="app-layout">
-      {/* Header Section */}
+      {/* Header */}
       <header className="header-section">
-        <div className="header-left">
-          <h1 className="game-logo">YANKEE SUGOROKU RPG</h1>
-        </div>
+        <h1 className="game-logo">九牙式：全国番長無双</h1>
         <div className="header-center">
           <div className="objective-box">
-            <span className="label">Next Target:</span>
-            <span className="target-name">{nextObj.name}</span>
-            <span className="boss-info">VS {nextObj.boss}</span>
-            <span className="distance">あと <span className="num">{nextObj.distance}</span> 県</span>
+            <div className="label">目的地</div>
+            <div className="target-name">東京 / 総代 会長</div>
+            <div className="distance">あと <span className="num">{47 - displaySquare}</span> ヶ所</div>
           </div>
         </div>
-        <div className="header-right">
-          <div className="current-loc">
-            <MapPin size={16} />
-            {player.current_area_name}
-          </div>
+        <div className="current-loc">
+          <MapIcon size={18} />
+          <span>現在地: {player.current_area_name}</span>
         </div>
       </header>
 
       {/* Left Sidebar: Stats */}
       <aside className="sidebar-section">
         <div className="player-profile">
-          <div className="hero-portrait-sidebar">
-            <img src={heroImg} alt="Hero" />
-          </div>
           <div className="player-info">
-            <div className="title-badge-sm">{player.title}</div>
+            <span className="title-badge-sm">{player.title}</span>
             <div className="player-name-lg">{player.name}</div>
+          </div>
+          <div className="hero-portrait-sidebar">
+            <img src={heroImg} alt="hero" />
           </div>
         </div>
 
         <div className="stats-list">
+          <StatRow icon={<div className="icon-box purple">Lv</div>} label={`Level ${player.level}`} value={`${player.exp} / ${expNeeded} Exp`} color="var(--neon-purple)" />
           <StatRow icon={<div className="icon-box red">根</div>} label="根性 (HP)" value={player.guts} max={player.max_guts} color="var(--neon-red)" />
           <StatRow icon={<div className="icon-box blue">気</div>} label="気合 (MP)" value={player.kiai} max={player.max_kiai} color="var(--neon-blue)" />
-          <StatRow icon={<div className="icon-box yellow">金</div>} label="メンチ" value={player.menchi} color="var(--neon-yellow)" />
-          <StatRow icon={<div className="icon-box purple">防</div>} label="防御力" value={player.defense} color="var(--neon-purple)" />
           <div className="stat-divider"></div>
           <StatRow icon={<Sword size={16} />} label="攻撃力" value={player.strength} color="#fff" />
-          <StatRow icon={<Zap size={16} />} label="素早さ" value={player.speed} color="#fff" />
+          <StatRow icon={<Shield size={16} />} label="防御力" value={player.defense} color="#fff" />
+          <StatRow icon={<Zap size={16} />} label="メンチ" value={player.menchi} color="var(--neon-yellow)" />
         </div>
+
+        {canRecover && !battle && (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="recover-btn"
+            onClick={handleRecover}
+          >
+            飯を食って回復する
+          </motion.button>
+        )}
       </aside>
 
       {/* Center: Map */}
@@ -272,6 +233,7 @@ function App() {
               className={`map-dot ${displaySquare >= area.order ? 'active' : ''}`}
               style={{ left: `${area.x}%`, top: `${area.y}%` }}
               data-major={["広島", "大阪", "沖縄", "北海道", "東京"].includes(area.name)}
+              data-defeated={area.boss_defeated}
             >
               <div className="dot-inner"></div>
               <span className={`dot-label ${area.label_dir || 'bottom'}`}>{area.name}</span>
@@ -290,7 +252,7 @@ function App() {
           </div>
         </div>
 
-        {/* Battle Overlay (Conditional) */}
+        {/* Battle Overlay */}
         <AnimatePresence>
           {battle && rival && (
             <motion.div
@@ -319,7 +281,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Prediction */}
               {prediction && (
                 <div className="battle-prediction">
                   <div className="pred-row">
@@ -365,7 +326,7 @@ function App() {
           )}
           {showGameOver && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="full-overlay">
-              <h1>GAME OVER</h1>
+              <h1>死闘の果てに倒れた...</h1>
               <button className="restart-btn" onClick={handleRestart}>RETRY</button>
             </motion.div>
           )}
@@ -392,7 +353,7 @@ function App() {
             onClick={handleRoll}
             disabled={isRolling || battle}
           >
-            {isRolling ? "ROLLING..." : "メンチを切って進む"}
+            {isRolling ? "MOVING..." : "メンチを切って進む"}
             <div className="btn-sub">ROLL THE DICE</div>
           </button>
         </div>
@@ -416,22 +377,14 @@ function StatRow({ icon, label, value, max, color }) {
 }
 
 function Dice({ value }) {
-  // value is 1-6
-  // sprite is 3 columns, 2 rows
-  // 1: x=0, y=0
-  // 2: x=-100, y=0
-  // 3: x=-200, y=0
-  // 4: x=0, y=-100
-  // 5: x=-100, y=-100
-  // 6: x=-200, y=-100
   const row = value > 3 ? 1 : 0;
   const col = (value - 1) % 3;
-
   const style = {
-    backgroundPosition: `-${col * 100}px -${row * 100}px`
+    backgroundPosition: `-${col * 100}px -${row * 100}px`,
+    backgroundImage: "url('/assets/dice.png')",
+    width: '100px',
+    height: '100px',
+    backgroundSize: '300px 200px'
   };
-
   return <div className="dice-container" style={style}></div>
 }
-
-export default App
