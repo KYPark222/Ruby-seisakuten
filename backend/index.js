@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
+const { exec } = require('child_process');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -20,7 +22,7 @@ app.get('/api/player', async (req, res) => {
     try {
         const player = await db('players').first();
         const area = await db('areas').where({ id: player.current_area_id }).first();
-        res.json({ ...player, current_area_name: area.name });
+        res.json({ ...player, current_area_name: area.name, x: area.x, y: area.y });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -42,41 +44,40 @@ app.post('/api/sugoroku/roll', async (req, res) => {
         const roll = Math.floor(Math.random() * 6) + 1;
         const player = await db('players').first();
 
-        let newSquare = player.current_square + roll;
-        const MAX_SQUARES = 10; // Simple logic: 10 squares per area
+        // New logic: 1 prefecture = 1 square. Total 47 squares.
+        const currentArea = await db('areas').where({ id: player.current_area_id }).first();
+        let nextOrder = currentArea.order + roll;
+        if (nextOrder > 47) nextOrder = 47;
+
+        const nextArea = await db('areas').where({ order: nextOrder }).first();
 
         let event = 'nothing';
         let message = `サイコロを振って ${roll} 進んだ！`;
 
-        if (newSquare >= MAX_SQUARES) {
-            newSquare = 0;
-            // Move to next area
-            const nextArea = await db('areas').where('order', '>', (await db('areas').where('id', player.current_area_id).first()).order).orderBy('order', 'asc').first();
-
-            if (nextArea) {
-                await db('players').where({ id: player.id }).update({
-                    current_square: newSquare,
-                    current_area_id: nextArea.id
-                });
-                event = 'area_complete';
-                message = `エリア制覇！次は ${nextArea.name} だ！`;
-            } else {
-                // Last Area Reached or Stay
-                await db('players').where({ id: player.id }).update({ current_square: MAX_SQUARES });
-                message = "すでに頂点に近づいている...";
-            }
+        if (nextOrder === 47 && currentArea.order !== 47) {
+            event = 'goal';
+            message = "日本制覇！ついに最北の地、北海道に到達したぞ！";
         } else {
-            await db('players').where({ id: player.id }).update({ current_square: newSquare });
-
             // Random Event (Combat)
             if (Math.random() > 0.6) {
                 event = 'battle';
-                message = "チンピラに絡まれた！(メンチ切られた)";
+                message = `${nextArea.name}でチンピラに絡まれた！`;
             }
         }
 
+        await db('players').where({ id: player.id }).update({
+            current_area_id: nextArea.id,
+            current_square: nextOrder
+        });
+
         const updatedPlayer = await db('players').where({ id: player.id }).first();
-        res.json({ roll, player: updatedPlayer, event, message });
+        const updatedArea = await db('areas').where({ id: updatedPlayer.current_area_id }).first();
+        res.json({
+            roll,
+            player: { ...updatedPlayer, current_area_name: updatedArea.name, x: updatedArea.x, y: updatedArea.y },
+            event,
+            message
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -166,6 +167,34 @@ app.post('/api/battle/action', async (req, res) => {
 
         const updatedPlayer = await db('players').where({ id: player.id }).first();
         res.json({ battle: activeBattle, player: updatedPlayer, logs });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Battle Prediction (Ruby Integration)
+app.post('/api/battle/predict', async (req, res) => {
+    try {
+        const { player_hp, player_atk, enemy_hp, enemy_atk } = req.body;
+        const input = JSON.stringify({ player_hp, player_atk, enemy_hp, enemy_atk });
+
+        const scriptPath = path.join(__dirname, 'scripts', 'yankee_intuition.rb');
+
+        // Escape single quotes in input for shell the command
+        const escapedInput = input.replace(/'/g, "'\\''");
+
+        exec(`ruby "${scriptPath}" '${escapedInput}'`, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`exec error: ${error}`);
+                return res.status(500).json({ error: "Ruby prediction failed" });
+            }
+            try {
+                const result = JSON.parse(stdout);
+                res.json(result);
+            } catch (e) {
+                res.status(500).json({ error: "Failed to parse Ruby output" });
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

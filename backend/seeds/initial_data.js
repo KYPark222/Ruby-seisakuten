@@ -8,19 +8,38 @@ exports.seed = async function (knex) {
   await knex('players').del();
   await knex('areas').del();
 
-  // Insert areas
-  const areas = await knex('areas').insert([
-    { name: '福岡 (武覇血斬高校)', order: 1, difficulty: 1, boss_name: '地元の番長' },
-    { name: '広島', order: 2, difficulty: 2, boss_name: '安芸の鬼瓦' },
-    { name: '大阪', order: 3, difficulty: 3, boss_name: '道頓堀の龍' },
-    { name: '沖縄', order: 4, difficulty: 4, boss_name: 'シーサー・キング' },
-    { name: '北海道', order: 5, difficulty: 5, boss_name: '最北の帝王' },
-    { name: '東京 (国会議事堂高校)', order: 6, difficulty: 10, boss_name: '伝説の頂点' }
-  ]);
+  const prefectureData = [
+    { name: '沖縄', x: 12, y: 85 }, { name: '鹿児島', x: 18, y: 78 }, { name: '宮崎', x: 22, y: 79 },
+    { name: '熊本', x: 19, y: 74 }, { name: '大分', x: 23, y: 72 }, { name: '佐賀', x: 17, y: 71 },
+    { name: '長崎', x: 14, y: 72 }, { name: '福岡', x: 20, y: 69 }, { name: '山口', x: 25, y: 67 },
+    { name: '島根', x: 28, y: 64 }, { name: '広島', x: 29, y: 67 }, { name: '鳥取', x: 33, y: 64 },
+    { name: '岡山', x: 34, y: 67 }, { name: '兵庫', x: 38, y: 66 }, { name: '京都', x: 41, y: 63 },
+    { name: '大阪', x: 41, y: 68 }, { name: '奈良', x: 43, y: 69 }, { name: '和歌山', x: 42, y: 74 },
+    { name: '滋賀', x: 43, y: 64 }, { name: '三重', x: 45, y: 68 }, { name: '徳島', x: 38, y: 71 },
+    { name: '香川', x: 36, y: 70 }, { name: '愛媛', x: 32, y: 72 }, { name: '高知', x: 33, y: 75 },
+    { name: '愛知', x: 48, y: 67 }, { name: '岐阜', x: 49, y: 63 }, { name: '静岡', x: 54, y: 68 },
+    { name: '福井', x: 46, y: 61 }, { name: '石川', x: 48, y: 56 }, { name: '富山', x: 52, y: 56 },
+    { name: '長野', x: 54, y: 60 }, { name: '山梨', x: 58, y: 64 }, { name: '神奈川', x: 61, y: 68 },
+    { name: '東京', x: 63, y: 65 }, { name: '埼玉', x: 62, y: 61 }, { name: '千葉', x: 67, y: 67 },
+    { name: '茨城', x: 68, y: 60 }, { name: '栃木', x: 66, y: 57 }, { name: '群馬', x: 62, y: 57 },
+    { name: '新潟', x: 60, y: 51 }, { name: '福島', x: 68, y: 52 }, { name: '山形', x: 69, y: 47 },
+    { name: '宮城', x: 73, y: 47 }, { name: '秋田', x: 70, y: 42 }, { name: '岩手', x: 75, y: 41 },
+    { name: '青森', x: 74, y: 36 }, { name: '北海道', x: 85, y: 20 }
+  ];
+
+  const areas = prefectureData.map((p, i) => ({
+    name: p.name,
+    order: i + 1,
+    difficulty: Math.floor(i / 5) + 1,
+    boss_name: `${p.name}のドン`,
+    x: p.x,
+    y: p.y
+  }));
+
+  await knex('areas').insert(areas);
 
   // Fetch areas to get IDs
-  const allAreas = await knex('areas').select('id', 'order');
-  const getAreaId = (order) => allAreas.find(a => a.order === order).id;
+  const allAreas = await knex('areas').select('id', 'order', 'name');
 
   // Insert initial player
   await knex('players').insert([
@@ -29,50 +48,36 @@ exports.seed = async function (knex) {
       guts: 100, max_guts: 100,
       kiai: 50, max_kiai: 50,
       menchi: 1000,
-      current_area_id: getAreaId(1),
-      current_square: 0
+      current_area_id: allAreas.find(a => a.order === 1).id,
+      current_square: 1
     }
   ]);
 
   // Insert rivals for each area
   const rivalsData = [];
-
-  // Fukuoka
-  rivalsData.push(
-    { name: '駅前のチンピラ', area_id: getAreaId(1), guts: 30, strength: 5, speed: 5, menchi_reward: 100, exp_reward: 10, is_boss: false },
-    { name: 'コンビニのガキ', area_id: getAreaId(1), guts: 20, strength: 3, speed: 8, menchi_reward: 50, exp_reward: 5, is_boss: false },
-    { name: '地元の番長', area_id: getAreaId(1), guts: 80, strength: 12, speed: 6, menchi_reward: 500, exp_reward: 50, is_boss: true }
-  );
-
-  // Hiroshima
-  rivalsData.push(
-    { name: 'もみじまんじゅう野郎', area_id: getAreaId(2), guts: 50, strength: 10, speed: 8, menchi_reward: 200, exp_reward: 20, is_boss: false },
-    { name: '安芸の鬼瓦', area_id: getAreaId(2), guts: 120, strength: 18, speed: 10, menchi_reward: 1000, exp_reward: 100, is_boss: true }
-  );
-
-  // Osaka
-  rivalsData.push(
-    { name: '食い倒れヤンキー', area_id: getAreaId(3), guts: 80, strength: 15, speed: 12, menchi_reward: 400, exp_reward: 40, is_boss: false },
-    { name: '道頓堀の龍', area_id: getAreaId(3), guts: 200, strength: 25, speed: 15, menchi_reward: 2000, exp_reward: 200, is_boss: true }
-  );
-
-  // Okinawa
-  rivalsData.push(
-    { name: 'ゴーヤチャンプルー番長', area_id: getAreaId(4), guts: 120, strength: 20, speed: 18, menchi_reward: 600, exp_reward: 60, is_boss: false },
-    { name: 'シーサー・キング', area_id: getAreaId(4), guts: 300, strength: 35, speed: 20, menchi_reward: 3000, exp_reward: 300, is_boss: true }
-  );
-
-  // Hokkaido
-  rivalsData.push(
-    { name: '極寒の狂犬', area_id: getAreaId(5), guts: 180, strength: 28, speed: 22, menchi_reward: 800, exp_reward: 80, is_boss: false },
-    { name: '最北の帝王', area_id: getAreaId(5), guts: 450, strength: 45, speed: 25, menchi_reward: 5000, exp_reward: 500, is_boss: true }
-  );
-
-  // Tokyo
-  rivalsData.push(
-    { name: 'エリート番長', area_id: getAreaId(6), guts: 250, strength: 40, speed: 30, menchi_reward: 1200, exp_reward: 120, is_boss: false },
-    { name: '伝説の頂点', area_id: getAreaId(6), guts: 1000, strength: 80, speed: 50, menchi_reward: 10000, exp_reward: 1000, is_boss: true }
-  );
+  allAreas.forEach(area => {
+    rivalsData.push({
+      name: `${area.name}の不良`,
+      area_id: area.id,
+      guts: 20 + area.order * 5,
+      strength: 5 + area.order,
+      speed: 5 + area.order,
+      menchi_reward: 100 + area.order * 20,
+      exp_reward: 10 + area.order,
+      is_boss: false
+    });
+    // Boss for each area
+    rivalsData.push({
+      name: `${area.name}のドン`,
+      area_id: area.id,
+      guts: 50 + area.order * 10,
+      strength: 10 + area.order * 2,
+      speed: 8 + area.order,
+      menchi_reward: 500 + area.order * 50,
+      exp_reward: 50 + area.order * 2,
+      is_boss: true
+    });
+  });
 
   await knex('rivals').insert(rivalsData);
 };
