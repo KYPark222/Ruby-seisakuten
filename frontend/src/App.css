@@ -592,28 +592,32 @@ body {
 
 /* --- Battle Modal --- */
 .battle-modal {
-  position: absolute;
+  position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 90%;
-  max-width: 600px;
-  background: rgba(10, 10, 10, 0.95);
+  width: 95%;
+  max-width: 500px;
+  max-height: 95vh;
+  background: rgba(5, 5, 5, 0.98);
   border: 2px solid var(--neon-red);
-  border-radius: 20px;
-  padding: 2rem;
-  z-index: 100;
-  box-shadow: 0 0 50px rgba(255, 0, 60, 0.4);
-  backdrop-filter: blur(20px);
+  border-radius: 15px;
+  padding: 1rem;
+  z-index: 1000;
+  box-shadow: 0 0 50px rgba(255, 0, 60, 0.5);
+  backdrop-filter: blur(25px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .battle-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .blinking {
-  font-size: 2.5rem;
+  font-size: 1.8rem;
   font-weight: 900;
   font-style: italic;
   color: var(--neon-red);
@@ -634,8 +638,10 @@ body {
 .battle-arena {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .fighter {
@@ -741,11 +747,11 @@ body {
 }
 
 .battle-prediction {
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
   border: 1px dashed var(--neon-blue);
-  padding: 1rem;
+  padding: 0.8rem;
   border-radius: 8px;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   text-align: center;
 }
 
@@ -791,6 +797,7 @@ body {
   font-weight: 900;
   cursor: pointer;
 }
+
 /* --- Sidebar Footer & Retry Button --- */
 .sidebar-footer {
   margin-top: auto;
@@ -819,4 +826,36 @@ body {
   color: var(--neon-red);
   box-shadow: 0 0 15px rgba(255, 0, 60, 0.2);
   filter: drop-shadow(0 0 5px var(--neon-red));
+}
+
+/* --- Battle Standings Styles --- */
+.standing-container {
+  width: 100%;
+  height: 180px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  overflow: visible;
+  margin-bottom: 5px;
+}
+
+.fighter-standing {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
+}
+
+.enemy-standing {
+  transform: scaleX(-1);
+  /* Flip enemy to face player */
+}
+
+.fighter.player .standing-container {
+  justify-content: flex-start;
+}
+
+.battle-arena {
+  align-items: flex-end !important;
+  padding-bottom: 2rem;
 }

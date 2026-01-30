@@ -10,6 +10,15 @@ import miniHero1 from './assets/mini_hero_1.png'
 import miniHero2 from './assets/mini_hero_2.png'
 import diceImg from './assets/dice.png'
 
+// Battle Standings
+import heroBattleImg from './assets/battlers/hero_battle.png'
+import hiroshimaBossImg from './assets/battlers/hiroshima_boss.png'
+import okinawaBossImg from './assets/battlers/okinawa_boss.png'
+import hokkaidoBossImg from './assets/battlers/hokkaido_boss.png'
+import tokyoBossImg from './assets/battlers/tokyo_boss.png'
+import osakaBossImg from './assets/battlers/osaka_boss.png'
+import zakoBattleImg from './assets/battlers/zako_battle.png'
+
 const API_BASE = 'http://localhost:3001/api'
 
 export default function App() {
@@ -374,12 +383,31 @@ export default function App() {
 
               <div className="battle-arena">
                 <div className="fighter player">
-                  <img src={heroImg} className="fighter-img" />
+                  <div className="standing-container">
+                    <img src={heroBattleImg} alt="Hero" className="fighter-standing" />
+                  </div>
                   <div className="hp-bar-sm"><div className="fill" style={{ width: `${(player.guts / player.max_guts) * 100}%` }}></div></div>
                 </div>
                 <div className="vs">VS</div>
                 <div className="fighter enemy">
-                  <div className="fighter-img enemy-icon">👿</div>
+                  <div className="standing-container">
+                    {rival.is_boss ? (
+                      <img
+                        src={
+                          rival.name.includes('鉄丸') ? hiroshimaBossImg :
+                            rival.name.includes('笑門') ? osakaBossImg :
+                              rival.name.includes('島袋') ? okinawaBossImg :
+                                rival.name.includes('氷室') ? hokkaidoBossImg :
+                                  rival.name.includes('総代') ? tokyoBossImg :
+                                    hiroshimaBossImg
+                        }
+                        alt="Boss"
+                        className="fighter-standing enemy-standing"
+                      />
+                    ) : (
+                      <img src={zakoBattleImg} alt="Zako" className="fighter-standing enemy-standing" />
+                    )}
+                  </div>
                   <div className="enemy-info">
                     <div className="name">{rival.name}</div>
                     <div className="school">{rival.school_name}</div>

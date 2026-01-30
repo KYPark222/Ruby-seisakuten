@@ -350,16 +350,20 @@ app.post('/api/player/recover', async (req, res) => {
 app.post('/api/system/reset', async (req, res) => {
     try {
         await db.transaction(async trx => {
-            // Delete all active battles
+            // Delete all dynamic data
             await trx('active_battles').del();
+            if (await trx.schema.hasTable('defeated_bosses')) {
+                await trx('defeated_bosses').del();
+            }
 
-            // Reset all boss_defeated flags in areas
-            await trx('areas').update({ boss_defeated: false });
+            // Reset boss flags in areas
+            await trx('areas').update({ boss_defeated: 0 });
 
-            // Find Fukuoka ID
-            const fukuoka = await trx('areas').where({ name: '福岡' }).first();
+            // Find Fukuoka
+            const fukuoka = await trx('areas').where('name', '福岡').first();
 
-            // Reset player to initial state
+            // Reset player status
+            // We update ALL rows in players table
             await trx('players').update({
                 title: '博多の無名',
                 guts: 30,
@@ -370,9 +374,12 @@ app.post('/api/system/reset', async (req, res) => {
                 defense: 4,
                 menchi: 0,
                 exp: 0,
+                experience: 0,
                 level: 1,
-                current_area_id: fukuoka ? fukuoka.id : 1,
-                current_square: 1
+                next_level_exp: 100,
+                current_area_id: fukuoka ? fukuoka.id : null,
+                current_square: 1,
+                remaining_moves: 0
             });
         });
 
