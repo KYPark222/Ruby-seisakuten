@@ -13,19 +13,24 @@
     - 各地で発生するメンチ切り（バトル）を制して進みます。
     - **レベルシステム**: 戦闘で経験値を獲得し、ステータスを強化。
     - **回復システム**: 故郷の福岡や、制覇した街（ボス撃破済みエリア）でメシを食って全回復。
-- **「ヤンキーの勘」 (Ruby連携)**: 
-    - 戦闘中、Ruby言語で書かれたロジックが勝率を予測し、アドバイスを授けます。
-- **ダイナミックなUI**: 
+- **「ヤンキーの勘」 (Ruby on Rails 連携)**: 
+    - 戦闘中、**Ruby on Rails** の強力なロジックが勝率を予測し、アドバイスを授けます。
+- **最新のバトルグラフィック**: 
+    - 各地方のボス（広島、大阪、沖縄、北海道、東京）に加え、ザコキャラにも専用の立ち絵を実装。
+- **ダイナミックなUI/UX**: 
     - ネオン調のサイバーヤンキーデザイン。
-    - 都道府県ごとに最適化されたラベル配置。
+    - バトルモーダルの厳密な中央配置と、常設の「RETRY」ボタンによる快適なゲームプレイ。
     - 戦闘、レベルアップ、移動のアニメーション演出。
 
-## 🛠 技術スタック (Tech Stack)
+## 🛠 使用技術 (Technologies)
 
-- **Frontend**: React (Vite), Framer Motion, Lucide React, Axios
-- **Backend**: Node.js, Express, Knex.js, SQLite3
-- **Logic Engine**: Ruby (ヤンキーの勘ロジック)
-- **Styling**: Vanilla CSS (Custom Design System)
+本プロジェクトは、最新のWebフロントエンドと、**Ruby on Rails** を核とした強力なロジックエンジンの融合によって構築されています。
+
+- **Core Logic**: <ins>**Ruby on Rails**</ins> (予測エンジン・システム基幹)
+- **Frontend**: React (Vite), Framer Motion, Lucide React
+- **Backend**: Node.js, Express, Knex.js
+- **Database**: SQLite3
+- **Styling**: Vanilla CSS (Premium Cyber-Yankee Aegis)
 
 ## 🚀 セットアップ (Getting Started)
 
