@@ -8,6 +8,7 @@ import './App.css'
 import heroImg from './assets/hero.jpg'
 import miniHero1 from './assets/mini_hero_1.png'
 import miniHero2 from './assets/mini_hero_2.png'
+import diceImg from './assets/dice.png'
 
 const API_BASE = 'http://localhost:3001/api'
 
@@ -16,6 +17,8 @@ export default function App() {
   const [allAreas, setAllAreas] = useState([])
   const [isRolling, setIsRolling] = useState(false)
   const [lastRoll, setLastRoll] = useState(null)
+  const [shufflingDice, setShufflingDice] = useState(false)
+  const [displayDiceValue, setDisplayDiceValue] = useState(1)
   const [logs, setLogs] = useState(["全国制覇への旅が始まった..."])
   const [battle, setBattle] = useState(null)
   const [rival, setRival] = useState(null)
@@ -25,6 +28,7 @@ export default function App() {
   const [walkImgIdx, setWalkImgIdx] = useState(1)
   const [showEnding, setShowEnding] = useState(false)
   const [showGameOver, setShowGameOver] = useState(false)
+  const [selectableAreaIds, setSelectableAreaIds] = useState([])
 
   const logEndRef = useRef(null)
 
@@ -61,32 +65,73 @@ export default function App() {
       const res = await axios.post(`${API_BASE}/sugoroku/roll`)
       const { roll, player: updatedPlayer, event, message } = res.data
 
-      setLastRoll(roll)
-      addLog(message)
+      setLastRoll(null) // Reset lastRoll to show animation
+      setShufflingDice(true)
 
-      // Start Walking Animation
-      setIsWalking(true)
-      const walkInterval = setInterval(() => {
-        setWalkImgIdx(prev => (prev === 1 ? 2 : 1))
-      }, 150)
-
-      // Linear move for simplicity in this demo, usually you'd animate through segments
-      setPos({ x: updatedPlayer.x, y: updatedPlayer.y })
+      const shuffleInterval = setInterval(() => {
+        setDisplayDiceValue(Math.floor(Math.random() * 6) + 1)
+      }, 80)
 
       setTimeout(async () => {
-        clearInterval(walkInterval)
-        setIsWalking(false)
-        setIsRolling(false)
-        setLastRoll(null)
-        setPlayer(updatedPlayer)
+        clearInterval(shuffleInterval)
+        setShufflingDice(false)
+        setLastRoll(roll)
+        setDisplayDiceValue(roll)
+        addLog(`サイコロ：${roll}が出た！移動先を選べ！`)
 
-        if (event === 'battle' || event === 'boss_battle') {
-          startBattle(event === 'boss_battle')
+        // Calculate selectable areas via BFS
+        const currentArea = allAreas.find(a => a.id === player.current_area_id)
+        if (!currentArea) {
+          setIsRolling(false)
+          return
         }
-      }, 2000)
+
+        const targetSequence = ['広島', '大阪', '沖縄', '北海道', '東京']
+
+        // Find nodes at exact distance 'roll'
+        // We use BFS to find all nodes at distance 'roll'
+        // Queued item: { areaId, distance, visited }
+        let queue = [{ id: currentArea.id, dist: 0, path: [currentArea.id] }]
+        let results = new Set()
+        let bossTerminals = new Set()
+
+        while (queue.length > 0) {
+          let { id, dist, path } = queue.shift()
+
+          if (dist === roll) {
+            results.add(id)
+            continue
+          }
+
+          // In this game, areas are connected if their 'order' differs by 1
+          const area = allAreas.find(a => a.id === id)
+          const neighbors = allAreas.filter(a => Math.abs(a.order - area.order) === 1)
+
+          for (let neighbor of neighbors) {
+            // Standard rule: no immediate backtracking (A -> B -> A)
+            if (path.length >= 2 && neighbor.id === path[path.length - 2]) continue
+
+            // Boss check: If we hit a boss that isn't defeated, we must stop there
+            const isBoss = targetSequence.includes(neighbor.name) && !neighbor.boss_defeated
+
+            if (isBoss) {
+              bossTerminals.add(neighbor.id)
+            } else {
+              queue.push({ id: neighbor.id, dist: dist + 1, path: [...path, neighbor.id] })
+            }
+          }
+        }
+
+        // Add both exact distance nodes and boss terminals
+        const finalIds = new Set([...results, ...bossTerminals])
+        setSelectableAreaIds(Array.from(finalIds))
+
+        setIsRolling(false)
+      }, 1200)
 
     } catch (e) {
       setIsRolling(false)
+      setShufflingDice(false)
     }
   }
 
@@ -98,6 +143,39 @@ export default function App() {
       fetchPrediction()
     } catch (e) {
       console.error("Battle failed to start", e)
+    }
+  }
+
+  const handleMove = async (targetAreaId) => {
+    if (isRolling || battle) return
+    setSelectableAreaIds([])
+    setLastRoll(null)
+
+    try {
+      setIsWalking(true)
+      const walkInterval = setInterval(() => {
+        setWalkImgIdx(prev => (prev === 1 ? 2 : 1))
+      }, 150)
+
+      const res = await axios.post(`${API_BASE}/sugoroku/move`, { targetAreaId })
+      const { player: updatedPlayer, event, message } = res.data
+
+      // Animate movement
+      setPos({ x: updatedPlayer.x, y: updatedPlayer.y })
+
+      setTimeout(() => {
+        clearInterval(walkInterval)
+        setIsWalking(false)
+        setPlayer(updatedPlayer)
+        addLog(message)
+
+        if (event === 'battle' || event === 'boss_battle') {
+          startBattle(event === 'boss_battle')
+        }
+      }, 1500)
+    } catch (e) {
+      setIsWalking(false)
+      console.error("Movement failed", e)
     }
   }
 
@@ -147,8 +225,14 @@ export default function App() {
     }
   }
 
-  const handleRestart = () => {
-    window.location.reload()
+  const handleRestart = async () => {
+    try {
+      await axios.post(`${API_BASE}/system/reset`)
+      window.location.reload()
+    } catch (e) {
+      console.error("Reset failed", e)
+      window.location.reload()
+    }
   }
 
   if (!player) return <div className="loading">LOADING NANIWA...</div>
@@ -158,6 +242,13 @@ export default function App() {
   const expNeeded = player.level * 100
   const canRecover = currentArea?.order === 1 || currentArea?.boss_defeated;
 
+  const targetSequence = ['広島', '大阪', '沖縄', '北海道', '東京']
+  const currentTargetName = targetSequence.find(name => {
+    const area = allAreas.find(a => a.name === name)
+    return area && !area.boss_defeated
+  }) || '東京'
+  const currentTargetArea = allAreas.find(a => a.name === currentTargetName)
+
   return (
     <div className="app-layout">
       {/* Header */}
@@ -166,8 +257,8 @@ export default function App() {
         <div className="header-center">
           <div className="objective-box">
             <div className="label">目的地</div>
-            <div className="target-name">東京 / 総代 会長</div>
-            <div className="distance">あと <span className="num">{47 - displaySquare}</span> ヶ所</div>
+            <div className="target-name">{currentTargetName} / {currentTargetArea?.boss_name || '???'}</div>
+            <div className="distance">あと <span className="num">{currentTargetArea ? Math.max(0, currentTargetArea.order - displaySquare) : '??'}</span> ヶ所</div>
           </div>
         </div>
         <div className="current-loc">
@@ -208,21 +299,36 @@ export default function App() {
             飯を食って回復する
           </motion.button>
         )}
+
+        <div className="sidebar-footer">
+          <button className="system-retry-btn" onClick={handleRestart}>
+            RETRY
+          </button>
+        </div>
       </aside>
 
       {/* Center: Map */}
       <main className="main-section">
         <div className="map-container-full">
           <AnimatePresence mode="wait">
-            {lastRoll && (
+            {(lastRoll || shufflingDice) && (
               <motion.div
-                key={lastRoll}
-                initial={{ rotate: -180, scale: 0 }}
-                animate={{ rotate: 0, scale: 1 }}
-                exit={{ scale: 0 }}
+                key={shufflingDice ? 'shuffling' : lastRoll}
+                initial={{ rotate: -180, scale: 0, opacity: 0 }}
+                animate={{
+                  rotate: shufflingDice ? [0, 90, 180, 270, 360] : 0,
+                  scale: 1,
+                  opacity: 1,
+                  y: shufflingDice ? [0, -20, 0] : 0
+                }}
+                transition={{
+                  rotate: { repeat: shufflingDice ? Infinity : 0, duration: 0.5, ease: "linear" },
+                  y: { repeat: shufflingDice ? Infinity : 0, duration: 0.3 }
+                }}
+                exit={{ scale: 0, opacity: 0 }}
                 className="dice-overlay"
               >
-                <Dice value={lastRoll} />
+                <Dice value={shufflingDice ? displayDiceValue : lastRoll} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -230,10 +336,11 @@ export default function App() {
           {allAreas.map(area => (
             <div
               key={area.id}
-              className={`map-dot ${displaySquare >= area.order ? 'active' : ''}`}
+              className={`map-dot ${player.current_area_id === area.id ? 'active' : ''} ${selectableAreaIds.includes(area.id) ? 'selectable' : ''} ${currentTargetArea && area.order > currentTargetArea.order ? 'locked' : ''}`}
               style={{ left: `${area.x}%`, top: `${area.y}%` }}
-              data-major={["広島", "大阪", "沖縄", "北海道", "東京"].includes(area.name)}
+              data-major={targetSequence.includes(area.name)}
               data-defeated={area.boss_defeated}
+              onClick={() => selectableAreaIds.includes(area.id) && handleMove(area.id)}
             >
               <div className="dot-inner"></div>
               <span className={`dot-label ${area.label_dir || 'bottom'}`}>{area.name}</span>
@@ -381,7 +488,7 @@ function Dice({ value }) {
   const col = (value - 1) % 3;
   const style = {
     backgroundPosition: `-${col * 100}px -${row * 100}px`,
-    backgroundImage: "url('/assets/dice.png')",
+    backgroundImage: `url(${diceImg})`,
     width: '100px',
     height: '100px',
     backgroundSize: '300px 200px'

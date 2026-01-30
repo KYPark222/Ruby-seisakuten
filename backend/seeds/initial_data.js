@@ -96,10 +96,10 @@ exports.seed = async function (knex) {
         {
             name: '九牙 アラシ',
             title: '博多の無名',
-            guts: 20, max_guts: 20,
-            kiai: 10, max_kiai: 10,
-            strength: 5,
-            defense: 3,
+            guts: 30, max_guts: 30,
+            kiai: 8, max_kiai: 8,
+            strength: 7,
+            defense: 4,
             menchi: 0,
             current_area_id: allAreas.find(a => a.name === '福岡').id,
             current_square: 1
@@ -108,6 +108,16 @@ exports.seed = async function (knex) {
 
     // Insert rivals
     const rivalsData = [];
+
+    // Boss Status Mapping
+    const bossStats = {
+        '広島': { guts: 18, strength: 6, gimmick: 'first_turn_atk', defeat_dialogue: "「……拳だけは、\n本物じゃったのう……」" },
+        '大阪': { guts: 16, strength: 5, gimmick: 'evasion', defeat_dialogue: "「はは……\n笑えへんくらい、強いやん……」" },
+        '沖縄': { guts: 22, strength: 5, gimmick: 'healing', defeat_dialogue: "「ああ……\n風が……止まったさ……」" },
+        '北海道': { guts: 20, strength: 6, gimmick: 'kiai_drain', defeat_dialogue: "「……寒さより、\n熱い拳やった……」" },
+        '東京': { guts: 28, strength: 7, gimmick: 'phase_shift', defeat_dialogue: "「なるほど……\n権力より……\n拳の方が……重い、か……」" }
+    };
+
     prefectureData.forEach((pref, i) => {
         const area = allAreas.find(a => a.name === pref.name);
         // Regular minion
@@ -115,26 +125,34 @@ exports.seed = async function (knex) {
             name: `${pref.name}の不良`,
             school_name: '地元の高校',
             area_id: area.id,
-            guts: 10 + i * 2,
-            strength: 2 + Math.floor(i / 5),
-            speed: 2 + Math.floor(i / 8),
+            guts: 8,
+            strength: 4,
+            speed: 2,
             menchi_reward: 50 + i * 10,
-            exp_reward: 10 + (i * 2), // Boosted exp reward
+            exp_reward: 10 + (i * 2),
             is_boss: false
         });
 
         // Boss
+        const stats = bossStats[pref.name] || {
+            guts: 10 + i * 5,
+            strength: 3 + Math.floor(i / 5),
+            gimmick: null,
+            defeat_dialogue: "「ぐはっ……まさか、俺が負けるとは……」"
+        };
+
         rivalsData.push({
             name: pref.boss || `${pref.name}のドン`,
             school_name: pref.school || `${pref.name}連合`,
             area_id: area.id,
-            guts: pref.boss ? (20 + i * 10) : (30 + i * 5),
-            strength: pref.boss ? (5 + i) : (4 + Math.floor(i / 2)),
-            speed: 5 + Math.floor(i / 4),
+            guts: stats.guts,
+            strength: stats.strength,
+            speed: 5,
             dialogue: pref.dialogue || 'ここから先は通さんぞ！',
-            gimmick: pref.gimmick || null,
+            gimmick: stats.gimmick,
+            defeat_dialogue: stats.defeat_dialogue,
             menchi_reward: 500 + i * 50,
-            exp_reward: 100 + (i * 10), // Bosses give lot of exp
+            exp_reward: 100 + (i * 10),
             is_boss: true
         });
     });

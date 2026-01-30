@@ -23,7 +23,7 @@ app.get('/api/player', async (req, res) => {
     try {
         const player = await db('players')
             .join('areas', 'players.current_area_id', 'areas.id')
-            .select('players.*', 'areas.name as current_area_name')
+            .select('players.*', 'areas.name as current_area_name', 'areas.x', 'areas.y')
             .first();
         res.json(player);
     } catch (error) {
@@ -45,52 +45,51 @@ app.get('/api/areas', async (req, res) => {
 app.post('/api/sugoroku/roll', async (req, res) => {
     try {
         const roll = Math.floor(Math.random() * 6) + 1;
+        res.json({ roll });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Move Player to Selected Area
+app.post('/api/sugoroku/move', async (req, res) => {
+    try {
+        const { targetAreaId } = req.body;
         const player = await db('players').first();
-        const currentArea = await db('areas').where({ id: player.current_area_id }).first();
+        const targetArea = await db('areas').where({ id: targetAreaId }).first();
 
-        let nextOrder = currentArea.order + roll;
-        if (nextOrder > 47) nextOrder = 47;
+        if (!targetArea) return res.status(404).json({ error: 'Area not found' });
 
-        // Force Stop at Major Cities Logic
-        const majorCities = ['広島', '大阪', '沖縄', '北海道', '東京'];
-        const passedMajorAreas = await db('areas')
-            .whereIn('name', majorCities)
-            .where('order', '>', currentArea.order)
-            .where('order', '<=', nextOrder)
-            .orderBy('order', 'asc');
-
-        let event = 'nothing';
-        let message = `サイコロを振って ${roll} 進んだ！`;
-
-        if (passedMajorAreas.length > 0) {
-            const stopArea = passedMajorAreas[0];
-            nextOrder = stopArea.order;
-            event = 'boss_battle';
-            message = `${stopArea.name}に到着！強敵の気配がする...`;
-        } else {
-            const nextAreaTemp = await db('areas').where({ order: nextOrder }).first();
-            if (nextOrder === 47 && currentArea.order !== 47) {
-                event = 'boss_battle';
-                message = "日本の頂点、東京に着いたぞ。最後の戦いだ。";
-            } else if (Math.random() > 0.6) {
-                event = 'battle';
-                message = `${nextAreaTemp.name}でチンピラに絡まれた！`;
-            }
-        }
-
-        const nextArea = await db('areas').where({ order: nextOrder }).first();
+        // Update player position
         await db('players').where({ id: player.id }).update({
-            current_area_id: nextArea.id,
-            current_square: nextArea.order
+            current_area_id: targetArea.id,
+            current_square: targetArea.order
         });
+
+        // Event Handling (Battle/Boss)
+        let event = 'nothing';
+        let message = `${targetArea.name}に到着した。`;
+
+        // Check if it's a major city (Boss Battle)
+        const majorCities = ['広島', '大阪', '沖縄', '北海道', '東京'];
+        if (majorCities.includes(targetArea.name) && !targetArea.boss_defeated) {
+            event = 'boss_battle';
+            message = `${targetArea.name}に到着！強敵の気配がする...`;
+        } else if (targetArea.name === '東京' && !targetArea.boss_defeated) {
+            event = 'boss_battle';
+            message = "日本の頂点、東京に着いたぞ。最後の戦いだ。";
+        } else if (Math.random() > 0.6) {
+            event = 'battle';
+            message = `${targetArea.name}でチンピラに絡まれた！`;
+        }
 
         const updatedPlayer = await db('players')
             .where('players.id', player.id)
             .join('areas', 'players.current_area_id', 'areas.id')
-            .select('players.*', 'areas.name as current_area_name')
+            .select('players.*', 'areas.name as current_area_name', 'areas.x', 'areas.y')
             .first();
 
-        res.json({ roll, player: updatedPlayer, event, message });
+        res.json({ player: updatedPlayer, event, message });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -145,13 +144,26 @@ app.post('/api/battle/action', async (req, res) => {
 
         // Player Turn
         let baseDmg = player.strength;
+
+        // Player Unique Skill: 根性30%以下の場合、攻撃力+3
+        if (player.guts <= player.max_guts * 0.3) {
+            baseDmg += 3;
+            log.push(`${player.name}の底力が爆発！ 攻撃力がアップした！`);
+        }
+
         if (action === 'skill') {
             if (player.kiai < 3) return res.status(400).json({ error: 'Not enough Kiai' });
             baseDmg *= 3; // "九牙式・一発入魂"
             await db('players').where({ id: player.id }).decrement('kiai', 3);
             log.push(`九牙式・一発入魂！ ${rival.name}に ${baseDmg} の致命傷！`);
         } else {
-            log.push(`${player.name}の攻撃！ ${rival.name}に ${baseDmg} のダメージ！`);
+            // Check for Boss Evasion Gimmick (Osaka)
+            if (rival.gimmick === 'evasion' && Math.random() < 0.3) {
+                log.push(`${rival.name}は身軽にかわした！ ダメージを与えられない！`);
+                baseDmg = 0;
+            } else {
+                log.push(`${player.name}の攻撃！ ${rival.name}に ${baseDmg} のダメージ！`);
+            }
         }
         rivalDmg = baseDmg;
 
@@ -159,19 +171,73 @@ app.post('/api/battle/action', async (req, res) => {
 
         // Rival Turn (if still alive)
         if (newRivalGuts > 0) {
-            playerDmg = Math.max(1, rival.strength - player.defense);
+            let rivalStrength = rival.strength;
+
+            // Boss Gimmicks
+            if (rival.gimmick === 'first_turn_atk' && activeBattle.turn === 1) {
+                rivalStrength += 4;
+                log.push(`${rival.name}の初手強攻撃！ 重い一撃が飛んでくる！`);
+            }
+            if (rival.gimmick === 'phase_shift' && newRivalGuts <= rival.guts / 2) {
+                rivalStrength += 2;
+                log.push(`${rival.name}の本気！ 攻撃力が上昇した！`);
+            }
+            if (rival.gimmick === 'healing') {
+                newRivalGuts = Math.min(rival.guts, newRivalGuts + 2);
+                log.push(`${rival.name}は傷口を焼いた！ 根性が2回復した。`);
+            }
+            if (rival.gimmick === 'kiai_drain') {
+                const newKiai = Math.max(0, player.kiai - 1);
+                await db('players').where({ id: player.id }).update({ kiai: newKiai });
+                log.push(`${rival.name}の凶悪な一撃！ ${player.name}の気合が1削られた！`);
+            }
+
+            playerDmg = Math.max(1, rivalStrength - player.defense);
             log.push(`${rival.name}の反撃！ ${player.name}は ${playerDmg} のダメージを受けた。`);
-            await db('players').where({ id: player.id }).decrement('guts', playerDmg);
+
+            // Fix: Ensure HP doesn't go below 0
+            const currentPlayer = await db('players').where({ id: player.id }).first();
+            const newPlayerGuts = Math.max(0, (currentPlayer.guts || player.guts) - playerDmg);
+            await db('players').where({ id: player.id }).update({ guts: newPlayerGuts });
         }
 
-        const updatedPlayer = await db('players').where({ id: player.id }).first();
+        // Update turn count
+        await db('active_battles').where({ id: activeBattle.id }).increment('turn', 1);
+
+        const updatedPlayer = await db('players')
+            .where('players.id', player.id)
+            .join('areas', 'players.current_area_id', 'areas.id')
+            .select('players.*', 'areas.name as current_area_name', 'areas.x', 'areas.y')
+            .first();
         let status = 'active';
         let expGained = 0;
         let leveledUp = false;
 
         if (newRivalGuts <= 0) {
             status = 'won';
-            log.push(`${rival.name}をぶっ飛ばした！`);
+
+            // Check for Boss Defeat Dialogues
+            if (rival.is_boss && rival.defeat_dialogue) {
+                if (rival.name === '鬼瓦 鉄丸') {
+                    log.push("EFFECT:SHAKE");
+                    log.push("EFFECT:SILENCE");
+                }
+                log.push(rival.defeat_dialogue);
+
+                if (rival.name === '笑門') log.push("EFFECT:HIDE_IMAGE");
+                if (rival.name === '島袋 カイ') log.push("EFFECT:FADEOUT_BGM");
+                if (rival.name === '氷室 冬牙') log.push("EFFECT:ICE_CRACK");
+
+                if (rival.name === '総代 会長') {
+                    log.push("EFFECT:BLACKOUT");
+                    log.push("EFFECT:WAIT");
+                    log.push("EFFECT:VICTORY_BGM");
+                    log.push("九牙 アラシ: 「……これが、俺の全国制覇や」");
+                }
+            } else {
+                log.push(`${rival.name}をぶっ飛ばした！`);
+            }
+
             expGained = rival.exp_reward;
             log.push(`経験値を ${expGained} 獲得した。`);
 
@@ -208,6 +274,32 @@ app.post('/api/battle/action', async (req, res) => {
         } else if (updatedPlayer.guts <= 0) {
             status = 'lost';
             log.push(`${player.name}は意識を失った...`);
+            log.push("「……まだ、終われねぇ……」");
+            log.push(`福岡からやり直しか...次はゼッテーぶっ飛ばす！！！`);
+
+            // Restart from Fukuoka
+            const fukuoka = await db('areas').where({ order: 1 }).first();
+            await db('players').where({ id: player.id }).update({
+                current_area_id: fukuoka.id,
+                current_square: 1,
+                guts: player.max_guts, // Recover to max
+                kiai: player.max_kiai
+            });
+
+            // Re-fetch to return the restarted state
+            const restartedPlayer = await db('players')
+                .where('players.id', player.id)
+                .join('areas', 'players.current_area_id', 'areas.id')
+                .select('players.*', 'areas.name as current_area_name', 'areas.x', 'areas.y')
+                .first();
+
+            return res.json({
+                status: 'lost',
+                logs: log,
+                player: restartedPlayer,
+                rivalGuts: newRivalGuts,
+                leveledUp: false
+            });
         }
 
         await db('active_battles').where({ id: activeBattle.id }).update({
@@ -239,7 +331,12 @@ app.post('/api/player/recover', async (req, res) => {
                 guts: player.max_guts,
                 kiai: player.max_kiai
             });
-            res.json({ message: "メシを食って全回復した！気合十分だ。", player: await db('players').first() });
+            const updatedPlayer = await db('players')
+                .where('players.id', player.id)
+                .join('areas', 'players.current_area_id', 'areas.id')
+                .select('players.*', 'areas.name as current_area_name', 'areas.x', 'areas.y')
+                .first();
+            res.json({ message: "メシを食って全回復した！気合十分だ。", player: updatedPlayer });
         } else {
             res.status(403).json({ error: "このエリアにはまだシマを任せられるツレがいねえ。回復はできねえぞ。" });
         }
@@ -249,6 +346,42 @@ app.post('/api/player/recover', async (req, res) => {
 });
 
 // Yankee Intuition (Ruby Integration)
+// System Reset (Initialize data)
+app.post('/api/system/reset', async (req, res) => {
+    try {
+        await db.transaction(async trx => {
+            // Delete all active battles
+            await trx('active_battles').del();
+
+            // Reset all boss_defeated flags in areas
+            await trx('areas').update({ boss_defeated: false });
+
+            // Find Fukuoka ID
+            const fukuoka = await trx('areas').where({ name: '福岡' }).first();
+
+            // Reset player to initial state
+            await trx('players').update({
+                title: '博多の無名',
+                guts: 30,
+                max_guts: 30,
+                kiai: 8,
+                max_kiai: 8,
+                strength: 7,
+                defense: 4,
+                menchi: 0,
+                exp: 0,
+                level: 1,
+                current_area_id: fukuoka ? fukuoka.id : 1,
+                current_square: 1
+            });
+        });
+
+        res.json({ message: "すべてのデータが初期化されました。博多から再出発や！" });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/battle/predict', async (req, res) => {
     try {
         const player = await db('players').first();
@@ -257,7 +390,13 @@ app.post('/api/battle/predict', async (req, res) => {
         const rival = await db('rivals').where({ id: activeBattle.rival_id }).first();
 
         const rubyScriptPath = path.join(__dirname, 'scripts', 'yankee_intuition.rb');
-        const cmd = `ruby "${rubyScriptPath}" ${player.guts} ${player.strength} ${player.defense} ${activeBattle.rival_current_guts} ${rival.strength} ${rival.speed}`;
+        const inputData = JSON.stringify({
+            player_hp: player.guts,
+            player_atk: player.strength,
+            enemy_hp: activeBattle.rival_current_guts,
+            enemy_atk: rival.strength
+        });
+        const cmd = `ruby "${rubyScriptPath}" '${inputData}'`;
 
         exec(cmd, (error, stdout, stderr) => {
             if (error) return res.status(500).json({ error: stderr || error.message });

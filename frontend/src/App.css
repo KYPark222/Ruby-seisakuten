@@ -321,9 +321,41 @@ body {
 
 .map-dot.active .dot-inner {
   background: var(--neon-blue);
-  box-shadow: 0 0 15px var(--neon-blue), inset 0 0 10px rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 20px var(--neon-blue), 0 0 40px var(--neon-blue), inset 0 0 10px rgba(255, 255, 255, 0.8);
   border-color: #fff;
-  transform: scale(1.1);
+  transform: scale(1.3);
+  z-index: 5;
+}
+
+.map-dot.selectable .dot-inner {
+  background: rgba(255, 255, 255, 0.4);
+  border: 2px solid var(--neon-yellow);
+  box-shadow: 0 0 15px var(--neon-yellow);
+  animation: pulse-gold 1.5s infinite;
+  cursor: pointer;
+}
+
+@keyframes pulse-gold {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 5px var(--neon-yellow);
+  }
+
+  50% {
+    transform: scale(1.2);
+    box-shadow: 0 0 20px var(--neon-yellow);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 5px var(--neon-yellow);
+  }
+}
+
+.map-dot.selectable:hover .dot-inner {
+  transform: scale(1.4);
+  background: var(--neon-yellow);
+  color: #000;
 }
 
 /* Connect dots with lines? No, asking for dots size only for now */
@@ -414,6 +446,23 @@ body {
   background: rgba(46, 204, 113, 0.6);
   border-color: #2ecc71;
   box-shadow: 0 0 15px #2ecc71;
+}
+
+/* Locked / Undiscovered dots */
+.map-dot.locked {
+  opacity: 0.2;
+  pointer-events: none;
+  filter: grayscale(1);
+  z-index: 1;
+}
+
+.map-dot.locked .dot-inner {
+  transform: scale(0.6);
+}
+
+.map-dot.locked .dot-label {
+  opacity: 0.3;
+  font-size: 0.7rem;
 }
 
 /* Character on Map */
@@ -741,4 +790,33 @@ body {
   color: #fff;
   font-weight: 900;
   cursor: pointer;
+}
+/* --- Sidebar Footer & Retry Button --- */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  width: 100%;
+}
+
+.system-retry-btn {
+  width: 100%;
+  padding: 0.7rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.3s;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.system-retry-btn:hover {
+  background: rgba(255, 0, 60, 0.1);
+  border-color: var(--neon-red);
+  color: var(--neon-red);
+  box-shadow: 0 0 15px rgba(255, 0, 60, 0.2);
+  filter: drop-shadow(0 0 5px var(--neon-red));
 }
